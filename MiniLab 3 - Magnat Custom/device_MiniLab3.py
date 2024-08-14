@@ -164,7 +164,7 @@ def OnUpdateBeatIndicator(value):
 # Function called at refresh, flag value changes depending on the refresh type 
 
 def OnRefresh(flags) :
-    _mk3.LightReturn().updateAll(_processor.shift)
+    _mk3.LightReturn().updateAll(_processor.shift, _processor.snapToScale)
     
     # if plugins.isValid(channels.selectedChannel()) :
     #     string = plugins.getPluginName(channels.selectedChannel())

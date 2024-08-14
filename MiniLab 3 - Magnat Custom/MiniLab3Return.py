@@ -87,9 +87,9 @@ class MiniLabLightReturn:
         time.sleep(0.2)
         send_to_device(bytes([0x04, 0x02, 0x16, 0x00, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14, 0x14]))
 
-        self.updateAll(False)
+        self.updateAll(False, False)
 
-    def updateAll(self, isShift):
+    def updateAll(self, isShift, isSnapToScale):
         # send_to_device(bytes([0x04, 0x02, 0x16, 0x00,
         #     0x14, 0x00, 0x14,
         #     0x14, 0x00, 0x14,
@@ -101,6 +101,8 @@ class MiniLabLightReturn:
         #     0x14, 0x00, 0x14
         # ]))
         
+        self.updateSnapToScale(isShift, isSnapToScale)
+
         self.LoopReturn(isShift)
         self.PlayReturn(isShift)
         self.RecordReturn(isShift)
@@ -117,6 +119,13 @@ class MiniLabLightReturn:
             send_to_device(bytes([0x02, 0x02, 0x16, 0x0B, 0x7F, 0x7F, 0x7F]))
         else:
             send_to_device(bytes([0x02, 0x02, 0x16, 0x0B, 0x14, 0x14, 0x14]))
+
+    def updateSnapToScale(self, isShift, isActivated):
+        if not isShift:
+            if isActivated:
+                send_to_device(bytes([0x02, 0x02, 0x16, 0x04, 0x7F, 0x7F, 0x7F]))
+            else:
+                send_to_device(bytes([0x02, 0x02, 0x16, 0x04, 0x14, 0x14, 0x14]))
 
     def updateStop(self, isPressed):
         if isPressed:

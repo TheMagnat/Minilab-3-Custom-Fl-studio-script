@@ -59,14 +59,12 @@ class MidiEventDispatcher:
         # This function will dispatch the event
     
         key = self._transform_fn(event)
-        processed = False
         if key in self._dispatch_map:
             callback_fn, filter_fn = self._dispatch_map[key]
             if filter_fn(event):
-                callback_fn(event)
-                processed = True
+                return callback_fn(event)
         
-        return processed
+        return False
 
 
 

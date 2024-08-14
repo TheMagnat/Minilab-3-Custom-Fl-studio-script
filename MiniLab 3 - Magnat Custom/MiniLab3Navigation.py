@@ -230,8 +230,16 @@ class NavigationMode:
                                         )
         self._paged_display.SetActivePage('Cut', expires=self._display_ms)
    
-   
-    def UndoRefresh(self) :
+    
+    def SnapRefresh(self, scaleName=''):
+        self._paged_display.SetPageLines('Snap',
+                                        10,
+                                        line1= 'Snap to Scale', 
+                                        line2= scaleName
+                                        )
+        self._paged_display.SetActivePage('Snap', expires=self._display_ms)
+
+    def UndoRefresh(self):
         self._paged_display.SetPageLines('Undo',
                                         10,
                                         line1= 'Undo', 

@@ -28,6 +28,7 @@ from MiniLab3Navigation import NavigationMode
 from MiniLab3Plugin import KNOB_HW_VALUE
 import ArturiaVCOL
 
+from KeyScaler import KeyScaler
 
 
 # This class processes all CC coming from the controller
@@ -148,6 +149,12 @@ class MiniLabMidiProcessor:
     def __init__(self, mk3):
 
         self.shift = False
+        
+        # Snap to scale
+        self.keyScaler = KeyScaler()
+        self.snapToScale = False
+        self.snapToScaleJustEdited = False
+        self.snapToScaleUnderPressure = False
 
         def by_midi_id(event) : return event.midiId
         def by_control_num(event) : return event.controlNum
@@ -156,18 +163,19 @@ class MiniLabMidiProcessor:
         def by_sysex(event) : return event.sysex
         def ignore_release(event): return self._is_pressed(event)
         def ignore_press(event): return not self._is_pressed(event)
-        def ignore_not_drum(event): return event.status in [153, 137]
+        def is_drum(event): return event.status in [153, 137]
 
         self._mk3 = mk3
 
+        # Main event, will then dispatch to other Dispatcher
         self._midi_id_dispatcher = (
             MidiEventDispatcher(by_midi_id)
             .NewHandler(176, self.OnCommandEvent)
             .NewHandler(224, self.OnWheelEvent)
             
             # Drum event
-            .NewHandler(144, self.OnDrumEvent, ignore_not_drum) # Pressed
-            .NewHandler(128, self.OnDrumEvent, ignore_not_drum) # Released
+            .NewHandler(144, self.onMidiEvent) # Pressed
+            .NewHandler(128, self.onMidiEvent) # Released
             )
             
         self._sysex_dispatcher = (
@@ -179,6 +187,8 @@ class MiniLabMidiProcessor:
         # Drum pad
         self._midi_drum_pad_dispatcher = (
             MidiEventDispatcher(by_control_num)
+            .NewHandler(36, self.SnapToScale)
+
             .NewHandler(38, self.StepByStep, ignore_release)
             .NewHandler(39, self.Loop, ignore_release)
             .NewHandler(40, self.Stop)
@@ -227,21 +237,19 @@ class MiniLabMidiProcessor:
             .NewHandlerForKeys(range(55,63), self.Navigator)
         )
         
-            # MAPPING WHEEL
-        
+        # MAPPING WHEEL
         self._wheel_dispatcher = (
             MidiEventDispatcher(by_status)
         )
         
-            #~NAVIGATION
-        
+        #~NAVIGATION
         self._navigation = NavigationMode(self._mk3.paged_display())
 
 
 
     # DISPATCH
     def ProcessEvent(self, event) :
-        # print("DEBUG PRINT: ", "MidiId: ", event.midiId, "controlNum: ", event.controlNum, "data2: ", event.data2, "status: ", event.status, "sysex: ", event.sysex, "controlVal: ", event.controlVal)
+        # print("DEBUG PRINT: ", "MidiId: ", event.midiId, "controlNum: ", event.controlNum, "data1: ", event.data1, "data2: ", event.data2, "status: ", event.status, "sysex: ", event.sysex, "controlVal: ", event.controlVal)
         
         # Removing the default drums and using function instead
         # if event.status in [153,137] :
@@ -250,17 +258,30 @@ class MiniLabMidiProcessor:
         #print(event.status,"\t",event.data1,"\t",event.controlNum,"\t",event.data2,"\t",event.midiId)
         return self._midi_id_dispatcher.Dispatch(event)
 
-    def OnDrumEvent(self, event):
-        self._midi_drum_pad_dispatcher.Dispatch(event)
+    def onMidiEvent(self, event):
+        # On drum event
+        if event.status in [153, 137]:
+            return self._midi_drum_pad_dispatcher.Dispatch(event)
+
+        if self.snapToScaleUnderPressure:
+            newNote = self.keyScaler.getEventNote(event)
+            self.keyScaler.setRootNote(newNote)
+            self._navigation.SnapRefresh(self.keyScaler.getCurrentScaleName())
+            self.snapToScaleJustEdited = True
+
+        elif self.snapToScale:
+            self.keyScaler.scaleEvent(event)
+
+        return False
 
     def OnCommandEvent(self, event):
-        self._midi_command_dispatcher.Dispatch(event)
+        return self._midi_command_dispatcher.Dispatch(event)
 
     def OnWheelEvent(self, event):
-        self._wheel_dispatcher.Dispatch(event)
+        return self._wheel_dispatcher.Dispatch(event)
 
     def OnKnobEvent(self, event):
-        self._knob_dispatcher.Dispatch(event)
+        return self._knob_dispatcher.Dispatch(event)
 
     # def OnDrumEvent(self, event) :
     #     index = event.data1
@@ -312,9 +333,8 @@ class MiniLabMidiProcessor:
                 else :
                     transport.globalTransport(midi.FPT_No, 1)
                     self._show_and_focus(WidPlugin)
-        
 
-
+        return True
 
     # NAVIGATION
 
@@ -329,6 +349,7 @@ class MiniLabMidiProcessor:
             self._hideAll(event)
             self._show_and_focus(WidChannelRack)
             self._navigation.ChannelRackRefresh()
+        return True
             
     def TogglePlaylistChannelRack(self, event) :
         if ui.getFocused(WidPlaylist) != True :
@@ -341,11 +362,19 @@ class MiniLabMidiProcessor:
             
 
     def Navigator(self, event):
-    
         if event.data2 in range(65,73) :
             event.data2 = 65
         elif event.data2 in range(55,63) :
             event.data2 = 62
+        
+        if self.snapToScaleUnderPressure:
+            if event.data2 == 62 :
+                self.keyScaler.previousScale()
+                self._navigation.SnapRefresh(self.keyScaler.getCurrentScaleName())
+            elif event.data2 == 65 :
+                self.keyScaler.nextScale()
+                self._navigation.SnapRefresh(self.keyScaler.getCurrentScaleName())
+            return True
             
         if ui.getFocused(WidPlugin) == True :
             self._hideAll(event)         
@@ -376,7 +405,8 @@ class MiniLabMidiProcessor:
                 mixer.setTrackNumber(channels.getTargetFxTrack(channels.selectedChannel()),3)
         else :
             ui.setFocused(WidChannelRack)
-            
+        
+        return True
 
     def PluginTest(self, event) :
         if ui.getFocused(WidPlugin) :
@@ -391,7 +421,7 @@ class MiniLabMidiProcessor:
                 self.FastForward(event)
             else :
                 self.Rewind(event)
-
+        return True
 
     def showPlugin(self, event) :
         if channels.selectedChannel(1) != -1 :
@@ -406,6 +436,7 @@ class MiniLabMidiProcessor:
             self._navigation.RedoRefresh()
 
         self._mk3.LightReturn().updateUndoRedo(isPressed)
+        return True
 
     def Undo(self, event):
         isPressed = self._is_pressed(event)
@@ -414,19 +445,50 @@ class MiniLabMidiProcessor:
             self._navigation.UndoRefresh()
 
         self._mk3.LightReturn().updateUndoRedo(isPressed)
+        return True
         
 
     def Record(self, event) :
         transport.record()
         #self._navigation.RecordRefresh()
+        return True
     
     
     def Start(self, event) :
         transport.start()
-        #self._navigation.PlayRefresh()        
+        #self._navigation.PlayRefresh()
+        return True
     
     
-    def Stop(self, event) :
+    def SnapToScale(self, event):
+        isPressed = self._is_pressed(event)
+
+        # If pressed...
+        if isPressed:
+            self.snapToScaleUnderPressure = True
+
+            # ...And not active, activate it
+            if not self.snapToScale:
+                self.snapToScaleJustEdited = True
+                self.snapToScale = True
+                    
+                self._navigation.SnapRefresh(self.keyScaler.getCurrentScaleName())
+
+        # If release and active, deactivate it
+        else:
+            self.snapToScaleUnderPressure = False
+
+            if self.snapToScale and not self.snapToScaleJustEdited:
+                self.snapToScale = False
+                self._navigation.SnapRefresh("OFF")
+            
+            self.snapToScaleJustEdited = False
+
+
+        self._mk3.LightReturn().updateSnapToScale(self.shift, self.snapToScale)
+        return True
+
+    def Stop(self, event):
         isPressed = self._is_pressed(event)
         if isPressed:
             transport.stop()
@@ -434,14 +496,17 @@ class MiniLabMidiProcessor:
             # self._navigation.StopRefresh()
         
         self._mk3.LightReturn().updateStop(isPressed)
+        return True
 
     def Loop(self, event) :
         transport.globalTransport(midi.FPT_LoopRecord, 1)
         self._navigation.LoopRefresh()
+        return True
 
     def StepByStep(self, event):
         transport.globalTransport(midi.FPT_StepEdit, 1)
         self._navigation.StepByStepRefresh()
+        return True
 
     def Overdub(self, event) :
         transport.globalTransport(midi.FPT_Overdub,1)
@@ -452,19 +517,21 @@ class MiniLabMidiProcessor:
         pos = transport.getSongPos(2)
         transport.setSongPos(pos+24,2)
         self._navigation.FastForwardRefresh()
+        return True
 
     
     def Rewind(self, event) :
         pos = transport.getSongPos(2)
         transport.setSongPos(pos-24,2)
         self._navigation.RewindRefresh()
+        return True
 
 
     def SetClick(self, event) :
         transport.globalTransport(midi.FPT_Metronome,1)
         self._navigation.MetronomeRefresh()
+        return True
         
-    
     def Tap(self, event) :
         if self._is_pressed(event): # on press
             pass
@@ -489,6 +556,7 @@ class MiniLabMidiProcessor:
             self._navigation.VolumeChRefresh(value, 4)
         else :
             self.Plugin(event)
+        return True
             
    
     def SetPanTrack(self, event) :
@@ -498,6 +566,7 @@ class MiniLabMidiProcessor:
             self._navigation.PanChRefresh(value, 3)
         else :
             self.Plugin(event)
+        return True
             
 
     def AnalogLabPreset(self, event) :
@@ -535,8 +604,8 @@ class MiniLabMidiProcessor:
             KNOB_HW_VALUE, mapped = MiniLab3Plugin.Plugin(event, 0)
         
             UPDATE_KNOB = mapped
-
-            
+        
+        return True
 
     def PluginPreset(self, event) :
         if event.data2 in range(65,73) :
@@ -557,12 +626,9 @@ class MiniLabMidiProcessor:
                     device.forwardMIDICC(event.status + (event.data1 << 8) + (event.data2 << 16) + (PORT_MIDICC_ANALOGLAB << 24))
                 else :
                     self.Plugin(event)
-        
+        return True
         
     # UTILITY
-   
-   
-        
     def FakeMIDImsg(self) :
         transport.globalTransport(midi.FPT_Punch,1)
 
@@ -577,8 +643,8 @@ class MiniLabMidiProcessor:
 
     def ShiftOn(self, event) :
         self.shift = self.ShiftIsPressed(event)
-        self._mk3.LightReturn().updateAll(self.shift)
-
+        self._mk3.LightReturn().updateAll(self.shift, self.snapToScale)
+        return True
 
     def PadOn(self, index) :
         index= index-36
@@ -614,20 +680,15 @@ class MiniLabMidiProcessor:
                 value = round(KNOB_HW_VALUE[i]*127)
                 #print(value)
                 send_to_device(bytes([0x21, 0x10, 0x40, KNOB_HW_ID[i], 0x00, value]))
-                
-    
+
     def DAWMemory(self) :
         global MEMORY
         #print("MEMORY = ",MEMORY)
         MEMORY = 2
+        return True
         
     def ArturiaMemory(self) :
         global MEMORY
         #print("MEMORY = ",MEMORY)
         MEMORY = 1
-        
-        
-    
-            
-    
-
+        return True
