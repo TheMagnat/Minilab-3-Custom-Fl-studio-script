@@ -62,7 +62,8 @@ COLOR_MAP = [
         [0x7F, 0x4B, 0x00],
 ]
 
-
+ON_START_ON_INPUT_COLOR = [0x7F, 0x32, 0x00]
+ON_START_ON_INPUT_OFF_COLOR = [0x14, 0x05, 0x00]
 
 ON_STEP_COLOR = [0x7F, 0x32, 0x00]
 ON_STEP_OFF_COLOR = [0x14, 0x05, 0x00]
@@ -81,6 +82,8 @@ ON_STOP_COLOR = [0x14, 0x14, 0x14]
 class MiniLabLightReturn:
 
     def init(self):
+        self.isWaitingForInput = False
+
         send_to_device(bytes([0x04, 0x02, 0x16, 0x00, 0x7F, 0x00, 0x00, 0x7F, 0x00, 0x00, 0x7F, 0x00, 0x00, 0x7F, 0x00, 0x00, 0x7F, 0x00, 0x00, 0x7F, 0x00, 0x00, 0x7F, 0x00, 0x00, 0x7F, 0x00, 0x00]))
         time.sleep(0.2)
         send_to_device(bytes([0x04, 0x02, 0x16, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]))
@@ -90,23 +93,13 @@ class MiniLabLightReturn:
         self.updateAll(False, False)
 
     def updateAll(self, isShift, isSnapToScale):
-        # send_to_device(bytes([0x04, 0x02, 0x16, 0x00,
-        #     0x14, 0x00, 0x14,
-        #     0x14, 0x00, 0x14,
-        #     0x14, 0x00, 0x14,
-        #     0x14, 0x00, 0x14,
-        #     0x14, 0x00, 0x14,
-        #     0x14, 0x00, 0x14,
-        #     0x14, 0x00, 0x14,
-        #     0x14, 0x00, 0x14
-        # ]))
-        
         self.updateSnapToScale(isShift, isSnapToScale)
 
         self.LoopReturn(isShift)
         self.PlayReturn(isShift)
         self.RecordReturn(isShift)
         self.StepReturn(isShift)
+        self.WaitForInputReturn(isShift)
 
     def MetronomeReturn(self) :
         if ui.isMetronomeEnabled() :
@@ -129,9 +122,17 @@ class MiniLabLightReturn:
 
     def updateStop(self, isPressed):
         if isPressed:
+            self.isWaitingForInput = False
             send_to_device(bytes([0x02, 0x02, 0x16, 0x08, 0x7F, 0x7F, 0x7F]))
         else:
             send_to_device(bytes([0x02, 0x02, 0x16, 0x08, 0x14, 0x14, 0x14]))
+
+    def WaitForInputReturn(self, isShift):
+        if not isShift:
+            if ui.isStartOnInputEnabled():
+                send_to_device(bytes([0x02, 0x02, 0x16, 0x05, *ON_START_ON_INPUT_COLOR]))
+            else :
+                send_to_device(bytes([0x02, 0x02, 0x16, 0x05, *ON_START_ON_INPUT_OFF_COLOR]))
 
     def StepReturn(self, isShift):
         if not isShift:
@@ -147,9 +148,9 @@ class MiniLabLightReturn:
             else :
                 send_to_device(bytes([0x02, 0x02, 0x16, 0x07, *ON_LOOP_OFF_COLOR]))
 
-    def PlayReturn(self, isShift) :
+    def PlayReturn(self, isShift):
         if not isShift:
-            if mixer.getSongTickPos() != 0 :
+            if self.isWaitingForInput or mixer.getSongTickPos() != 0 :
                 send_to_device(bytes([0x02, 0x02, 0x16, 0x09, *ON_PLAY_COLOR]))
             else :
                 send_to_device(bytes([0x02, 0x02, 0x16, 0x09, *ON_PLAY_OFF_COLOR]))
@@ -162,6 +163,7 @@ class MiniLabLightReturn:
                 send_to_device(bytes([0x02, 0x02, 0x16, 0x0A, *ON_RECORD_OFF_COLOR]))
 
     def ProcessPlayBlink(self, value, isShift):
+        self.isWaitingForInput = False
         if not isShift:
             COLOR_PLAY_ON = bytes([0x02, 0x02, 0x16, 0x09, *ON_PLAY_COLOR]) 
             COLOR_PLAY_OFF =  bytes([0x02, 0x02, 0x16, 0x09, *ON_PLAY_OFF_COLOR]) 

@@ -195,6 +195,22 @@ class NavigationMode:
                                             )
             self._paged_display.SetActivePage('LoopOff', expires=self._display_ms)
     
+    def WaitForInputRefresh(self):
+        if ui.isStartOnInputEnabled():
+            self._paged_display.SetPageLines('WaitForInputOn',
+                                            10,
+                                            line1= 'Wait For Input Mode',
+                                            line2= 'ON'
+                                            )
+            self._paged_display.SetActivePage('WaitForInputOn', expires=self._display_ms)
+        else:
+            self._paged_display.SetPageLines('WaitForInputOff',
+                                            10,
+                                            line1= 'Wait For Input Mode',
+                                            line2= 'OFF'                             
+                                            )
+            self._paged_display.SetActivePage('WaitForInputOff', expires=self._display_ms)
+    
     def StepByStepRefresh(self):
         if ui.getStepEditMode():
             self._paged_display.SetPageLines('StepOn',

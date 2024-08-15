@@ -73,7 +73,6 @@ ANALOGLAB_KNOB_ID = (
                     115,
                     )
 
-
 KNOB_ID = (
             86,
             87,
@@ -84,7 +83,6 @@ KNOB_ID = (
             116,
             117
             )
-
 
 PAD_MATRIX = [
         0x34, 0x35, 0x36, 0x37,
@@ -99,8 +97,6 @@ PAD_MATRIX_STATE = [
         0, 0, 0, 0,
         0, 0, 0, 0
 ]
-
-                    
 
 # FPC MAP
 FPC_MAP = {
@@ -138,16 +134,13 @@ KNOB_HW_ID = [
 # UPDATE KNOBS
 UPDATE_KNOB = 0
 
-            
-
-
 class MiniLabMidiProcessor:
     @staticmethod
     def _is_pressed(event):
         return event.controlVal != 0
 
     def __init__(self, mk3):
-
+        
         self.shift = False
         
         # Snap to scale
@@ -155,7 +148,7 @@ class MiniLabMidiProcessor:
         self.snapToScale = False
         self.snapToScaleJustEdited = False
         self.snapToScaleUnderPressure = False
-
+        
         def by_midi_id(event) : return event.midiId
         def by_control_num(event) : return event.controlNum
         def by_velocity(event) : return event.data2
@@ -177,7 +170,7 @@ class MiniLabMidiProcessor:
             .NewHandler(144, self.onMidiEvent) # Pressed
             .NewHandler(128, self.onMidiEvent) # Released
             )
-            
+        
         self._sysex_dispatcher = (
             MidiEventDispatcher(by_sysex)
             .NewHandler(b'\xf0\x00 k\x7fB\x02\x00@b\x01\xf7', self.ArturiaMemory, ignore_release)
@@ -188,7 +181,7 @@ class MiniLabMidiProcessor:
         self._midi_drum_pad_dispatcher = (
             MidiEventDispatcher(by_control_num)
             .NewHandler(36, self.SnapToScale)
-
+            .NewHandler(37, self.WaitForInput, ignore_release)
             .NewHandler(38, self.StepByStep, ignore_release)
             .NewHandler(39, self.Loop, ignore_release)
             .NewHandler(40, self.Stop)
@@ -246,16 +239,9 @@ class MiniLabMidiProcessor:
         self._navigation = NavigationMode(self._mk3.paged_display())
 
 
-
     # DISPATCH
     def ProcessEvent(self, event) :
         # print("DEBUG PRINT: ", "MidiId: ", event.midiId, "controlNum: ", event.controlNum, "data1: ", event.data1, "data2: ", event.data2, "status: ", event.status, "sysex: ", event.sysex, "controlVal: ", event.controlVal)
-        
-        # Removing the default drums and using function instead
-        # if event.status in [153,137] :
-        #     return self.OnDrumEvent(event)
-        # else :
-        #print(event.status,"\t",event.data1,"\t",event.controlNum,"\t",event.data2,"\t",event.midiId)
         return self._midi_id_dispatcher.Dispatch(event)
 
     def onMidiEvent(self, event):
@@ -368,6 +354,7 @@ class MiniLabMidiProcessor:
             event.data2 = 62
         
         if self.snapToScaleUnderPressure:
+            self.snapToScaleJustEdited = True
             if event.data2 == 62 :
                 self.keyScaler.previousScale()
                 self._navigation.SnapRefresh(self.keyScaler.getCurrentScaleName())
@@ -506,6 +493,11 @@ class MiniLabMidiProcessor:
     def StepByStep(self, event):
         transport.globalTransport(midi.FPT_StepEdit, 1)
         self._navigation.StepByStepRefresh()
+        return True
+
+    def WaitForInput(self, event):
+        transport.globalTransport(midi.FPT_WaitForInput, 1)
+        self._navigation.WaitForInputRefresh()
         return True
 
     def Overdub(self, event) :

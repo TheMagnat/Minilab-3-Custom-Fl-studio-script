@@ -158,8 +158,6 @@ def OnDeInit():
 def OnUpdateBeatIndicator(value):
     _mk3.LightReturn().ProcessPlayBlink(value, _processor.shift)
     _mk3.LightReturn().ProcessRecordBlink(value, _processor.shift)
-    
- 
 
 # Function called at refresh, flag value changes depending on the refresh type 
 
@@ -191,6 +189,8 @@ def OnRefresh(flags) :
 
 
 # Function called time to time mainly to update the beat indicator
+def OnWaitingForInput():
+    _mk3.LightReturn().isWaitingForInput = True
 
 def OnIdle():
     _mk3.Idle()
